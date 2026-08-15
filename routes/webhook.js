@@ -81,3 +81,41 @@ router.post('/', async (req, res) => {
         await handleSales(contact, text);
         break;
       case 'scheduling':
+        await handleScheduling(contact, text);
+        break;
+      default:
+        await sendMessage(
+          contact.phone,
+          'Oi! Posso ajudar com suporte, vendas ou agendamento. O que você precisa hoje?'
+        );
+    }
+  } catch (err) {
+    console.error('Erro no webhook:', err);
+  }
+});
+
+async function upsertContact(phone) {
+  const existing = await db.query('SELECT * FROM contacts WHERE phone = $1', [phone]);
+
+  if (existing.rows.length > 0) {
+    await db.query('UPDATE contacts SET last_contact_at = NOW() WHERE id = $1', [existing.rows[0].id]);
+    return existing.rows[0];
+  }
+
+  const created = await db.query('INSERT INTO contacts (phone) VALUES ($1) RETURNING *', [phone]);
+  return created.rows[0];
+}
+
+async function escalateToHuman(contact, reason) {
+  await db.query(
+    `INSERT INTO escalation_queue (contact_id, reason, status) VALUES ($1, $2, 'pendente')`,
+    [contact.id, reason]
+  );
+
+  await sendMessage(
+    contact.phone,
+    'Ok! Já te encaminhei para um de nossos atendentes. Em instantes alguém te responde por aqui.'
+  );
+}
+
+module.exports = router;
